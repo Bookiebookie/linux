@@ -750,9 +750,6 @@ static u16 ieee80211_monitor_select_queue(struct net_device *dev,
 }
 
 static const struct net_device_ops ieee80211_monitorif_ops = {
-#if LINUX_VERSION_IS_LESS(4,10,0)
-	.ndo_change_mtu = __change_mtu,
-#endif
 	.ndo_open		= ieee80211_open,
 	.ndo_stop		= ieee80211_stop,
 	.ndo_uninit		= ieee80211_uninit,
