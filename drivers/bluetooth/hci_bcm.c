@@ -943,8 +943,10 @@ static int bcm_resource(struct acpi_resource *ares, void *data)
 
 static int bcm_apple_set_device_wakeup(struct bcm_device *dev, bool awake)
 {
+#ifdef CONFIG_ACPI
 	if (ACPI_FAILURE(acpi_execute_simple_method(dev->btlp, NULL, !awake)))
 		return -EIO;
+#endif
 
 	return 0;
 }
@@ -1160,11 +1162,6 @@ static int bcm_acpi_probe(struct bcm_device *dev)
 
 	return 0;
 }
-#else
-static int bcm_acpi_probe(struct bcm_device *dev)
-{
-	return -EINVAL;
-}
 #endif /* CONFIG_ACPI */
 
 static int bcm_of_probe(struct bcm_device *bdev)
@@ -1198,11 +1195,13 @@ static int bcm_probe(struct platform_device *pdev)
 	/* Initialize routing field to an unused value */
 	dev->pcm_int_params[0] = 0xff;
 
+#ifdef CONFIG_ACPI
 	if (has_acpi_companion(&pdev->dev)) {
 		ret = bcm_acpi_probe(dev);
 		if (ret)
 			return ret;
 	}
+#endif
 
 	ret = bcm_get_resources(dev);
 	if (ret)
@@ -1436,11 +1435,14 @@ static struct platform_driver bcm_driver = {
 	.remove = bcm_remove,
 	.driver = {
 		.name = "hci_bcm",
+#ifdef CONFIG_ACPI
 		.acpi_match_table = ACPI_PTR(bcm_acpi_match),
+#endif
 		.pm = &bcm_pm_ops,
 	},
 };
 
+#ifdef CPTCFG_BT_HCIUART_SERDEV
 static int bcm_serdev_probe(struct serdev_device *serdev)
 {
 	struct bcm_device *bcmdev;
@@ -1461,9 +1463,11 @@ static int bcm_serdev_probe(struct serdev_device *serdev)
 	/* Initialize routing field to an unused value */
 	bcmdev->pcm_int_params[0] = 0xff;
 
+#ifdef CONFIG_ACPI
 	if (has_acpi_companion(&serdev->dev))
 		err = bcm_acpi_probe(bcmdev);
 	else
+#endif
 		err = bcm_of_probe(bcmdev);
 	if (err)
 		return err;
@@ -1515,10 +1519,8 @@ static const struct of_device_id bcm_bluetooth_of_match[] = {
 	{ .compatible = "brcm,bcm4345c5" },
 	{ .compatible = "brcm,bcm4330-bt" },
 	{ .compatible = "brcm,bcm43438-bt", .data = &bcm43438_device_data },
-	{ .compatible = "brcm,bcm4349-bt", .data = &bcm43438_device_data },
 	{ .compatible = "brcm,bcm43540-bt", .data = &bcm4354_device_data },
 	{ .compatible = "brcm,bcm4335a0" },
-	{ .compatible = "infineon,cyw55572-bt" },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, bcm_bluetooth_of_match);
@@ -1530,10 +1532,13 @@ static struct serdev_device_driver bcm_serdev_driver = {
 	.driver = {
 		.name = "hci_uart_bcm",
 		.of_match_table = of_match_ptr(bcm_bluetooth_of_match),
+#ifdef CONFIG_ACPI
 		.acpi_match_table = ACPI_PTR(bcm_acpi_match),
+#endif
 		.pm = &bcm_pm_ops,
 	},
 };
+#endif
 
 int __init bcm_init(void)
 {
@@ -1541,7 +1546,9 @@ int __init bcm_init(void)
 	 * driver (ACPI generated) and serdev driver (DT).
 	 */
 	platform_driver_register(&bcm_driver);
+#ifdef CPTCFG_BT_HCIUART_SERDEV
 	serdev_device_driver_register(&bcm_serdev_driver);
+#endif
 
 	return hci_uart_register_proto(&bcm_proto);
 }
@@ -1549,7 +1556,9 @@ int __init bcm_init(void)
 int __exit bcm_deinit(void)
 {
 	platform_driver_unregister(&bcm_driver);
+#ifdef CPTCFG_BT_HCIUART_SERDEV
 	serdev_device_driver_unregister(&bcm_serdev_driver);
+#endif
 
 	return hci_uart_unregister_proto(&bcm_proto);
 }

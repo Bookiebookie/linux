@@ -15,6 +15,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/serdev.h>
 #include <linux/skbuff.h>
+#include <linux/module.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -313,7 +314,7 @@ static void h5_pkt_cull(struct h5 *h5)
 			break;
 
 		__skb_unlink(skb, &h5->unack);
-		dev_kfree_skb_irq(skb);
+		kfree_skb(skb);
 	}
 
 	if (skb_queue_empty(&h5->unack))
@@ -357,8 +358,7 @@ static void h5_handle_internal_rx(struct hci_uart *hu)
 		h5_link_control(hu, conf_req, 3);
 	} else if (memcmp(data, conf_req, 2) == 0) {
 		h5_link_control(hu, conf_rsp, 2);
-		if (h5->state != H5_ACTIVE)
-		    h5_link_control(hu, conf_req, 3);
+		h5_link_control(hu, conf_req, 3);
 	} else if (memcmp(data, conf_rsp, 2) == 0) {
 		if (H5_HDR_LEN(hdr) > 2)
 			h5->tx_win = (data[2] & 0x07);

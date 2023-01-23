@@ -383,7 +383,7 @@ void hci_uart_set_baudrate(struct hci_uart *hu, unsigned int speed)
 	tty_set_termios(tty, &ktermios);
 
 	BT_DBG("%s: New tty speeds: %d/%d", hu->hdev->name,
-	       tty->termios.c_ispeed, tty->termios.c_ospeed);
+	       ktermios.c_ispeed, ktermios.c_ospeed);
 }
 
 static int hci_uart_setup(struct hci_dev *hdev)
@@ -490,11 +490,6 @@ static int hci_uart_tty_open(struct tty_struct *tty)
 		BT_ERR("Can't allocate control structure");
 		return -ENFILE;
 	}
-	if (percpu_init_rwsem(&hu->proto_lock)) {
-		BT_ERR("Can't allocate semaphore structure");
-		kfree(hu);
-		return -ENOMEM;
-	}
 
 	tty->disc_data = hu;
 	hu->tty = tty;
@@ -506,6 +501,8 @@ static int hci_uart_tty_open(struct tty_struct *tty)
 
 	INIT_WORK(&hu->init_ready, hci_uart_init_work);
 	INIT_WORK(&hu->write_work, hci_uart_write_work);
+
+	percpu_init_rwsem(&hu->proto_lock);
 
 	/* Flush any pending characters in the driver */
 	tty_driver_flush_buffer(tty);
@@ -800,6 +797,7 @@ static int hci_uart_tty_ioctl(struct tty_struct *tty, struct file *file,
 	return err;
 }
 
+#define hci_uart_tty_compat_ioctl hci_uart_tty_ioctl
 /*
  * We don't provide read/write/poll interface for user space.
  */
@@ -831,7 +829,7 @@ static struct tty_ldisc_ops hci_uart_ldisc = {
 	.read		= hci_uart_tty_read,
 	.write		= hci_uart_tty_write,
 	.ioctl		= hci_uart_tty_ioctl,
-	.compat_ioctl	= hci_uart_tty_ioctl,
+	.compat_ioctl	= hci_uart_tty_compat_ioctl,
 	.poll		= hci_uart_tty_poll,
 	.receive_buf	= hci_uart_tty_receive,
 	.write_wakeup	= hci_uart_tty_wakeup,

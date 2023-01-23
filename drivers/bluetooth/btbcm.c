@@ -9,7 +9,6 @@
 #include <linux/module.h>
 #include <linux/firmware.h>
 #include <linux/dmi.h>
-#include <linux/of.h>
 #include <asm/unaligned.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -30,7 +29,7 @@
 #define BDADDR_BCM43341B (&(bdaddr_t) {{0xac, 0x1f, 0x00, 0x1b, 0x34, 0x43}})
 
 #define BCM_FW_NAME_LEN			64
-#define BCM_FW_NAME_COUNT_MAX		3
+#define BCM_FW_NAME_COUNT_MAX		2
 /* For kmalloc-ing the fw-name array instead of putting it on the stack */
 typedef char bcm_fw_name[BCM_FW_NAME_LEN];
 
@@ -454,12 +453,13 @@ static const struct bcm_subver_table bcm_uart_subver_table[] = {
 	{ 0x6606, "BCM4345C5"	},	/* 003.006.006 */
 	{ 0x230f, "BCM4356A2"	},	/* 001.003.015 */
 	{ 0x220e, "BCM20702A1"  },	/* 001.002.014 */
-	{ 0x420d, "BCM4349B1"	},	/* 002.002.013 */
-	{ 0x420e, "BCM4349B1"	},	/* 002.002.014 */
 	{ 0x4217, "BCM4329B1"   },	/* 002.002.023 */
 	{ 0x6106, "BCM4359C0"	},	/* 003.001.006 */
 	{ 0x4106, "BCM4335A0"	},	/* 002.001.006 */
 	{ 0x410c, "BCM43430B0"	},	/* 002.001.012 */
+	{ 0x2119, "BCM4373A0"   },	/* 001.001.025 */
+	{ 0x2310, "BCM4343A2"   },	/* 001.003.016 */
+	{ 0x2257, "CYW55560A1"  },	/* 001.002.087 */
 	{ }
 };
 
@@ -476,8 +476,98 @@ static const struct bcm_subver_table bcm_usb_subver_table[] = {
 	{ 0x6109, "BCM4335C0"	},	/* 003.001.009 */
 	{ 0x610c, "BCM4354"	},	/* 003.001.012 */
 	{ 0x6607, "BCM4350C5"	},	/* 003.006.007 */
+	{ 0x2119, "BCM4373A0"   },	/* 001.001.025 */
 	{ }
 };
+
+static int btbcm_poke_arm32(struct hci_dev *hdev, u32 addr, u32 data)
+{
+	int err = 0;
+	struct sk_buff *skb;
+	u8 buf[10];
+
+	buf[0] = 8;
+	addr = cpu_to_le32(addr);
+	memcpy(&buf[1], &addr, 4);
+	buf[5] = 0;
+	data = cpu_to_le32(data);
+	memcpy(&buf[6], &data, 4);
+
+	skb = __hci_cmd_sync(hdev, 0xfc0c, 10, buf, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "BCM: poke arm32 failed! (%d)",
+			   err);
+		goto done;
+	}
+	kfree_skb(skb);
+done:
+	return err;
+}
+
+static int btbcm_write_ram(struct hci_dev *hdev, u32 addr, const u8 * data, u32 count)
+{
+	int err = 0;
+	struct sk_buff *skb;
+	u8 * buf;
+
+	buf = kmalloc(count + 4, GFP_KERNEL);
+	addr = cpu_to_le32(addr);
+	memcpy(buf, &addr, 4);
+	memcpy(&buf[4], data, count);
+
+	skb = __hci_cmd_sync(hdev, 0xfc4c, count+4, buf, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "BCM: write_ram failed! (%d)",
+			   err);
+		goto done;
+	}
+	kfree_skb(skb);
+done:
+	kfree(buf);
+	return err;
+
+}
+
+static const u8 brcm_cypress_patch[] = {
+	0x22, 0xF6, 0xE5, 0xF8, 0x28, 0x46, 0x00, 0xF0,
+	0x0A, 0xF8, 0x45, 0xF6, 0xDD, 0xB8, 0x00, 0x00,
+	0x3C, 0x71, 0x4B, 0xF6, 0x5D, 0xFF, 0x4B, 0xF6,
+	0xA3, 0xFC, 0x4B, 0xF6, 0x4D, 0xBB, 0x00, 0x28,
+	0x03, 0xDA, 0x80, 0x01, 0x01, 0xD5, 0x45, 0xF6,
+	0x83, 0xBB, 0x70, 0x47
+};
+
+int btbcm_cypress_apply_patch(struct hci_dev *hdev)
+{
+	struct sk_buff *skb;
+	int err = 0;
+	u8 opcode;
+
+	btbcm_poke_arm32(hdev, 0x310000, 0x29531);
+	btbcm_poke_arm32(hdev, 0x260000, 0xBF1CF1BA);
+	btbcm_poke_arm32(hdev, 0x310004, 0x2AE6A);
+	btbcm_poke_arm32(hdev, 0x260004, 0xBCB2F1B4);
+	btbcm_poke_arm32(hdev, 0x310008, 0x11B17);
+	btbcm_poke_arm32(hdev, 0x260008, 0x3DEF04F);
+	btbcm_poke_arm32(hdev, 0x310304, 0x7);
+
+	btbcm_write_ram(hdev, 0x260300, brcm_cypress_patch, sizeof(brcm_cypress_patch));
+
+	opcode = 1;
+	skb = __hci_cmd_sync(hdev, 0xfd3d, 1, &opcode, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "BCM: Write_USB_Config failed (%d)",
+			   err);
+		goto done;
+	}
+	kfree_skb(skb);
+
+done:
+	return err;
+}
 
 int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done)
 {
@@ -486,13 +576,12 @@ int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done)
 	struct hci_rp_read_local_version *ver;
 	const struct bcm_subver_table *bcm_subver_table;
 	const char *hw_name = NULL;
-	struct device_node *root;
-	char *board_type = NULL;
 	char postfix[16] = "";
 	int fw_name_count = 0;
 	bcm_fw_name *fw_name;
 	const struct firmware *fw;
 	int i, err;
+	bool doCypressPatch = false;
 
 	/* Reset */
 	err = btbcm_reset(hdev);
@@ -547,35 +636,14 @@ int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done)
 		kfree_skb(skb);
 
 		snprintf(postfix, sizeof(postfix), "-%4.4x-%4.4x", vid, pid);
+
+		if ((vid == 0x04b4) && (pid == 0x640c))
+			doCypressPatch = true;
 	}
 
 	fw_name = kmalloc(BCM_FW_NAME_COUNT_MAX * BCM_FW_NAME_LEN, GFP_KERNEL);
 	if (!fw_name)
 		return -ENOMEM;
-
-	root = of_find_node_by_path("/");
-	if (root) {
-		int i, len;
-		const char *tmp;
-
-		of_property_read_string_index(root, "compatible", 0, &tmp);
-
-		/* convert '/'s in the compatible string to '-'s */
-		len = strlen(tmp) + 1;
-		board_type = kzalloc(len, GFP_KERNEL);
-		strscpy(board_type, tmp, len);
-		for (i = 0; i < board_type[i]; i++) {
-			if (board_type[i] == '/')
-				board_type[i] = '-';
-		}
-
-		of_node_put(root);
-	}
-
-	if (hw_name && board_type &&
-	    snprintf(fw_name[fw_name_count], BCM_FW_NAME_LEN,
-		     "brcm/%s.%s.hcd", hw_name, board_type) < BCM_FW_NAME_LEN)
-		fw_name_count++;
 
 	if (hw_name) {
 		snprintf(fw_name[fw_name_count], BCM_FW_NAME_LEN,
@@ -598,7 +666,10 @@ int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done)
 	}
 
 	if (*fw_load_done) {
-		err = btbcm_patchram(hdev, fw);
+		if (doCypressPatch)
+			err = btbcm_cypress_apply_patch(hdev);
+		if (!err)
+			err = btbcm_patchram(hdev, fw);
 		if (err)
 			bt_dev_info(hdev, "BCM: Patch failed (%d)", err);
 
@@ -610,7 +681,6 @@ int btbcm_initialize(struct hci_dev *hdev, bool *fw_load_done)
 	}
 
 	kfree(fw_name);
-	kfree(board_type);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(btbcm_initialize);
