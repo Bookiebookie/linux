@@ -86,13 +86,13 @@ static int btmrvl_sdio_probe_of(struct device *dev,
 	struct btmrvl_plt_wake_cfg *cfg;
 	int ret;
 
-	if (!dev->of_node ||
-	    !of_match_node(btmrvl_sdio_of_match_table, dev->of_node)) {
+	if (!dev_of_node(dev) ||
+	    !of_match_node(btmrvl_sdio_of_match_table, dev_of_node(dev))) {
 		dev_info(dev, "sdio device tree data not available\n");
 		return -1;
 	}
 
-	card->plt_of_node = dev->of_node;
+	card->plt_of_node = dev_of_node(dev);
 
 	card->plt_wake_cfg = devm_kzalloc(dev, sizeof(*card->plt_wake_cfg),
 					  GFP_KERNEL);
@@ -303,7 +303,7 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8987 = {
 
 static const struct btmrvl_sdio_device btmrvl_sdio_sd8997 = {
 	.helper         = NULL,
-	.firmware       = "mrvl/sdsd8997_combo_v4.bin",
+	.firmware       = "lrdmwl/88W8997_sdio.bin",
 	.reg            = &btmrvl_reg_89xx,
 	.support_pscan_win_report = true,
 	.sd_blksz_fw_dl = 256,
@@ -455,6 +455,10 @@ static int btmrvl_sdio_verify_fw_download(struct btmrvl_sdio_card *card,
 
 	 /* Wait for firmware to become ready */
 	for (tries = 0; tries < pollnum; tries++) {
+
+		if (tries != 0)
+			msleep(100);
+
 		sdio_claim_host(card->func);
 		ret = btmrvl_sdio_read_fw_status(card, &firmwarestat);
 		sdio_release_host(card->func);
@@ -463,8 +467,6 @@ static int btmrvl_sdio_verify_fw_download(struct btmrvl_sdio_card *card,
 
 		if (firmwarestat == FIRMWARE_READY)
 			return 0;
-
-		msleep(100);
 	}
 
 	return -ETIMEDOUT;
@@ -1552,6 +1554,13 @@ static int btmrvl_sdio_probe(struct sdio_func *func,
 
 	/* Disable the interrupts on the card */
 	btmrvl_sdio_disable_host_int(card);
+
+	/* Force Bluetooth to wait for Wi-Fi load firmware */
+	/* If we decide to support standalone Bluetooth this has to be changed */
+	if (btmrvl_sdio_verify_fw_download(card, 1)) {
+		ret = -EPROBE_DEFER;
+		goto unreg_dev;
+	}
 
 	if (btmrvl_sdio_download_fw(card)) {
 		BT_ERR("Downloading firmware failed!");

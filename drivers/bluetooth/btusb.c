@@ -8,6 +8,7 @@
 
 #include <linux/dmi.h>
 #include <linux/module.h>
+#include <linux/irq.h>
 #include <linux/usb.h>
 #include <linux/usb/quirks.h>
 #include <linux/firmware.h>
@@ -62,6 +63,8 @@ static struct usb_driver btusb_driver;
 #define BTUSB_INTEL_BROKEN_SHUTDOWN_LED	0x2000000
 #define BTUSB_INTEL_BROKEN_INITIAL_NCMD 0x4000000
 #define BTUSB_INTEL_NO_WBS_SUPPORT	0x8000000
+
+#define BTUSB_CYPRESS_PATCHRAM	0x80000000
 
 static const struct usb_device_id btusb_table[] = {
 	/* Generic Bluetooth USB device */
@@ -166,6 +169,13 @@ static const struct usb_device_id btusb_table[] = {
 	/* Intel Bluetooth USB Bootloader (RAM module) */
 	{ USB_DEVICE(0x8087, 0x0a5a),
 	  .driver_info = BTUSB_INTEL_BOOT | BTUSB_BROKEN_ISOC },
+
+	/*
+	 * Cypress devices with vendor specific id
+	 * This works with CYW4373, other chipsets unknown
+	 */
+	{ USB_VENDOR_AND_INTERFACE_INFO(0x04b4, 0xff, 0x01, 0x01),
+	  .driver_info = BTUSB_CYPRESS_PATCHRAM },
 
 	{ }	/* Terminating entry */
 };
@@ -420,18 +430,6 @@ static const struct usb_device_id blacklist_table[] = {
 	{ USB_DEVICE(0x04ca, 0x4006), .driver_info = BTUSB_REALTEK |
 						     BTUSB_WIDEBAND_SPEECH },
 
-	/* Realtek 8852CE Bluetooth devices */
-	{ USB_DEVICE(0x04ca, 0x4007), .driver_info = BTUSB_REALTEK |
-						     BTUSB_WIDEBAND_SPEECH },
-	{ USB_DEVICE(0x04c5, 0x1675), .driver_info = BTUSB_REALTEK |
-						     BTUSB_WIDEBAND_SPEECH },
-	{ USB_DEVICE(0x0cb8, 0xc558), .driver_info = BTUSB_REALTEK |
-						     BTUSB_WIDEBAND_SPEECH },
-	{ USB_DEVICE(0x13d3, 0x3587), .driver_info = BTUSB_REALTEK |
-						     BTUSB_WIDEBAND_SPEECH },
-	{ USB_DEVICE(0x13d3, 0x3586), .driver_info = BTUSB_REALTEK |
-						     BTUSB_WIDEBAND_SPEECH },
-
 	/* Realtek Bluetooth devices */
 	{ USB_VENDOR_AND_INTERFACE_INFO(0x0bda, 0xe0, 0x01, 0x01),
 	  .driver_info = BTUSB_REALTEK },
@@ -469,9 +467,6 @@ static const struct usb_device_id blacklist_table[] = {
 						     BTUSB_WIDEBAND_SPEECH |
 						     BTUSB_VALID_LE_STATES },
 	{ USB_DEVICE(0x0489, 0xe0d9), .driver_info = BTUSB_MEDIATEK |
-						     BTUSB_WIDEBAND_SPEECH |
-						     BTUSB_VALID_LE_STATES },
-	{ USB_DEVICE(0x13d3, 0x3568), .driver_info = BTUSB_MEDIATEK |
 						     BTUSB_WIDEBAND_SPEECH |
 						     BTUSB_VALID_LE_STATES },
 
@@ -651,6 +646,7 @@ struct btusb_data {
 	unsigned cmd_timeout_cnt;
 };
 
+#ifdef CONFIG_BT_INTEL
 static void btusb_intel_cmd_timeout(struct hci_dev *hdev)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
@@ -681,6 +677,7 @@ static void btusb_intel_cmd_timeout(struct hci_dev *hdev)
 	msleep(100);
 	gpiod_set_value_cansleep(reset_gpio, 0);
 }
+#endif
 
 static void btusb_rtl_cmd_timeout(struct hci_dev *hdev)
 {
@@ -735,13 +732,13 @@ static inline void btusb_free_frags(struct btusb_data *data)
 
 	spin_lock_irqsave(&data->rxlock, flags);
 
-	dev_kfree_skb_irq(data->evt_skb);
+	kfree_skb(data->evt_skb);
 	data->evt_skb = NULL;
 
-	dev_kfree_skb_irq(data->acl_skb);
+	kfree_skb(data->acl_skb);
 	data->acl_skb = NULL;
 
-	dev_kfree_skb_irq(data->sco_skb);
+	kfree_skb(data->sco_skb);
 	data->sco_skb = NULL;
 
 	spin_unlock_irqrestore(&data->rxlock, flags);
@@ -1901,11 +1898,6 @@ static int btusb_setup_csr(struct hci_dev *hdev)
 
 	rp = (struct hci_rp_read_local_version *)skb->data;
 
-	bt_dev_info(hdev, "CSR: Setting up dongle with HCI ver=%u rev=%04x; LMP ver=%u subver=%04x; manufacturer=%u",
-		le16_to_cpu(rp->hci_ver), le16_to_cpu(rp->hci_rev),
-		le16_to_cpu(rp->lmp_ver), le16_to_cpu(rp->lmp_subver),
-		le16_to_cpu(rp->manufacturer));
-
 	/* Detect a wide host of Chinese controllers that aren't CSR.
 	 *
 	 * Known fake bcdDevices: 0x0100, 0x0134, 0x1915, 0x2520, 0x7558, 0x8891
@@ -2049,6 +2041,7 @@ static int inject_cmd_complete(struct hci_dev *hdev, __u16 opcode)
 	return hci_recv_frame(hdev, skb);
 }
 
+#ifdef CONFIG_BT_INTEL
 static int btusb_recv_bulk_intel(struct btusb_data *data, void *buffer,
 				 int count)
 {
@@ -2156,6 +2149,9 @@ static int btusb_send_frame_intel(struct hci_dev *hdev, struct sk_buff *skb)
 
 	return -EILSEQ;
 }
+#endif
+
+#ifdef CONFIG_BT_HCIBTUSB_MTK
 
 /* UHW CR mapping */
 #define MTK_BT_MISC		0x70002510
@@ -2440,29 +2436,15 @@ static int btusb_mtk_hci_wmt_sync(struct hci_dev *hdev,
 
 	set_bit(BTUSB_TX_WAIT_VND_EVT, &data->flags);
 
-	/* WMT cmd/event doesn't follow up the generic HCI cmd/event handling,
-	 * it needs constantly polling control pipe until the host received the
-	 * WMT event, thus, we should require to specifically acquire PM counter
-	 * on the USB to prevent the interface from entering auto suspended
-	 * while WMT cmd/event in progress.
-	 */
-	err = usb_autopm_get_interface(data->intf);
-	if (err < 0)
-		goto err_free_wc;
-
 	err = __hci_cmd_send(hdev, 0xfc6f, hlen, wc);
 
 	if (err < 0) {
 		clear_bit(BTUSB_TX_WAIT_VND_EVT, &data->flags);
-		usb_autopm_put_interface(data->intf);
 		goto err_free_wc;
 	}
 
 	/* Submit control IN URB on demand to process the WMT event */
 	err = btusb_mtk_submit_wmt_recv_urb(hdev);
-
-	usb_autopm_put_interface(data->intf);
-
 	if (err < 0)
 		goto err_free_wc;
 
@@ -3112,6 +3094,8 @@ static int btusb_recv_acl_mtk(struct hci_dev *hdev, struct sk_buff *skb)
 MODULE_FIRMWARE(FIRMWARE_MT7663);
 MODULE_FIRMWARE(FIRMWARE_MT7668);
 
+#endif
+
 #ifdef CONFIG_PM
 /* Configure an out-of-band gpio as wake-up pin, if specified in device tree */
 static int marvell_config_oob_wake(struct hci_dev *hdev)
@@ -3124,8 +3108,8 @@ static int marvell_config_oob_wake(struct hci_dev *hdev)
 	u8 cmd[5];
 
 	/* Move on if no wakeup pin specified */
-	if (of_property_read_u16(dev->of_node, "marvell,wakeup-pin", &pin) ||
-	    of_property_read_u16(dev->of_node, "marvell,wakeup-gap-ms", &gap))
+	if (of_property_read_u16(dev_of_node(dev), "marvell,wakeup-pin", &pin) ||
+	    of_property_read_u16(dev_of_node(dev), "marvell,wakeup-gap-ms", &gap))
 		return 0;
 
 	/* Vendor specific command to configure a GPIO as wake-up pin */
@@ -3653,7 +3637,7 @@ static int btusb_config_oob_wake(struct hci_dev *hdev)
 		return 0;
 
 	/* Move on if no IRQ specified */
-	irq = of_irq_get_byname(dev->of_node, "wakeup");
+	irq = of_irq_get_byname(dev_of_node(dev), "wakeup");
 	if (irq <= 0) {
 		bt_dev_dbg(hdev, "%s: no OOB Wakeup IRQ in DT", __func__);
 		return 0;
@@ -3805,6 +3789,7 @@ static int btusb_probe(struct usb_interface *intf,
 	data->recv_event = hci_recv_frame;
 	data->recv_bulk = btusb_recv_bulk;
 
+#ifdef CONFIG_BT_INTEL
 	if (id->driver_info & BTUSB_INTEL_COMBINED) {
 		/* Allocate extra space for Intel device */
 		priv_size += sizeof(struct btintel_data);
@@ -3813,6 +3798,7 @@ static int btusb_probe(struct usb_interface *intf,
 		data->recv_event = btusb_recv_event_intel;
 		data->recv_bulk = btusb_recv_bulk_intel;
 	}
+#endif
 
 	data->recv_acl = hci_recv_frame;
 
@@ -3890,6 +3876,17 @@ static int btusb_probe(struct usb_interface *intf,
 		data->diag = usb_ifnum_to_if(data->udev, ifnum_base + 2);
 	}
 
+	if (IS_ENABLED(CONFIG_BT_HCIBTUSB_BCM) &&
+	    (id->driver_info & BTUSB_CYPRESS_PATCHRAM)) {
+		hdev->setup = btbcm_setup_patchram;
+		hdev->set_diag = btusb_bcm_set_diag;
+		hdev->set_bdaddr = btbcm_set_bdaddr;
+
+		/* Broadcom LM_DIAG Interface numbers are hardcoded */
+		data->diag = usb_ifnum_to_if(data->udev, ifnum_base + 2);
+	}
+
+#ifdef CONFIG_BT_INTEL
 	/* Combined Intel Device setup to support multiple setup routine */
 	if (id->driver_info & BTUSB_INTEL_COMBINED) {
 		err = btintel_configure_setup(hdev);
@@ -3909,10 +3906,12 @@ static int btusb_probe(struct usb_interface *intf,
 		if (id->driver_info & BTUSB_INTEL_BROKEN_SHUTDOWN_LED)
 			btintel_set_flag(hdev, INTEL_BROKEN_SHUTDOWN_LED);
 	}
+#endif
 
 	if (id->driver_info & BTUSB_MARVELL)
 		hdev->set_bdaddr = btusb_set_bdaddr_marvell;
 
+#ifdef CONFIG_BT_HCIBTUSB_MTK
 	if (IS_ENABLED(CONFIG_BT_HCIBTUSB_MTK) &&
 	    (id->driver_info & BTUSB_MEDIATEK)) {
 		hdev->setup = btusb_mtk_setup;
@@ -3922,16 +3921,19 @@ static int btusb_probe(struct usb_interface *intf,
 		set_bit(HCI_QUIRK_NON_PERSISTENT_SETUP, &hdev->quirks);
 		data->recv_acl = btusb_recv_acl_mtk;
 	}
+#endif
 
 	if (id->driver_info & BTUSB_SWAVE) {
 		set_bit(HCI_QUIRK_FIXUP_INQUIRY_MODE, &hdev->quirks);
 		set_bit(HCI_QUIRK_BROKEN_LOCAL_COMMANDS, &hdev->quirks);
 	}
 
+#ifdef CONFIG_BT_INTEL
 	if (id->driver_info & BTUSB_INTEL_BOOT) {
 		hdev->manufacturer = 2;
 		set_bit(HCI_QUIRK_RAW_DEVICE, &hdev->quirks);
 	}
+#endif
 
 	if (id->driver_info & BTUSB_ATH3012) {
 		data->setup_on_usb = btusb_setup_qca;
@@ -4042,7 +4044,7 @@ static int btusb_probe(struct usb_interface *intf,
 			goto out_free_dev;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_HCIBTUSB_BCM) && data->diag) {
+	if (IS_ENABLED(CPTCFG_BT_HCIBTUSB_BCM) && data->diag) {
 		if (!usb_driver_claim_interface(&btusb_driver,
 						data->diag, data))
 			__set_diag_interface(hdev);

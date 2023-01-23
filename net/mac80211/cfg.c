@@ -401,6 +401,10 @@ static int ieee80211_set_tx(struct ieee80211_sub_if_data *sdata,
 	return ret;
 }
 
+#ifdef CONFIG_LRDMWL_FIPS
+void crypto_gcmp_set_if_name(struct crypto_aead *parent, char *ifname);
+#endif
+
 static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 			     u8 key_idx, bool pairwise, const u8 *mac_addr,
 			     struct key_params *params)
@@ -445,6 +449,12 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 				  cs);
 	if (IS_ERR(key))
 		return PTR_ERR(key);
+
+#ifdef CONFIG_LRDMWL_FIPS
+	if (params->cipher == WLAN_CIPHER_SUITE_GCMP ||
+		params->cipher == WLAN_CIPHER_SUITE_GCMP_256)
+		crypto_gcmp_set_if_name(key->u.gcmp.tfm, sdata->name);
+#endif
 
 	if (pairwise)
 		key->conf.flags |= IEEE80211_KEY_FLAG_PAIRWISE;
@@ -3383,6 +3393,9 @@ static int ieee80211_set_csa_beacon(struct ieee80211_sub_if_data *sdata,
 #ifdef CONFIG_MAC80211_MESH
 	case NL80211_IFTYPE_MESH_POINT: {
 		struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
+
+		if (params->chandef.width != sdata->vif.bss_conf.chandef.width)
+			return -EINVAL;
 
 		/* changes into another band are not supported */
 		if (sdata->vif.bss_conf.chandef.chan->band !=

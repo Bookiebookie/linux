@@ -9,7 +9,7 @@
  * Copyright 2007, Michael Wu <flamingice@sourmilk.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
  * Copyright 2016-2017  Intel Deutschland GmbH
- * Copyright (C) 2018-2021 Intel Corporation
+ * Copyright (C) 2018-2020 Intel Corporation
  */
 
 #include <linux/if_arp.h>
@@ -28,6 +28,44 @@
 #define IEEE80211_PROBE_DELAY (HZ / 33)
 #define IEEE80211_CHANNEL_TIME (HZ / 33)
 #define IEEE80211_PASSIVE_CHANNEL_TIME (HZ / 9)
+
+#ifndef _REMOVE_LAIRD_MODS_
+static inline int __get_PROBE_DELAY(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->probe_delay_time;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return IEEE80211_PROBE_DELAY;
+}
+#undef IEEE80211_PROBE_DELAY
+#define IEEE80211_PROBE_DELAY __get_PROBE_DELAY(scan_req)
+static inline int __get_CHANNEL_TIME(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->duration;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return IEEE80211_CHANNEL_TIME;
+}
+#undef IEEE80211_CHANNEL_TIME
+#define IEEE80211_CHANNEL_TIME __get_CHANNEL_TIME(scan_req)
+static inline int __get_PASSIVE_CHANNEL_TIME(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->passive_channel_time;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return IEEE80211_PASSIVE_CHANNEL_TIME;
+}
+#undef IEEE80211_PASSIVE_CHANNEL_TIME
+#define IEEE80211_PASSIVE_CHANNEL_TIME __get_PASSIVE_CHANNEL_TIME(scan_req)
+// note, this version returns 0 by default, since no macro value available
+static inline int __get_SUSPEND_TIME(struct cfg80211_scan_request *scan_req)
+{
+	int msec = scan_req->scan_suspend_time;
+	if (0 < msec && msec <= 250)
+		return (HZ * msec + 999) / 1000;
+	return 0; // caller will fill in default
+}
+#endif /* _REMOVE_LAIRD_MODS_ */
 
 void ieee80211_rx_bss_put(struct ieee80211_local *local,
 			  struct ieee80211_bss *bss)
@@ -155,16 +193,56 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	};
 	bool signal_valid;
 	struct ieee80211_sub_if_data *scan_sdata;
-	struct ieee802_11_elems *elems;
+	struct ieee802_11_elems elems;
 	size_t baselen;
 	u8 *elements;
+
+#ifndef _REMOVE_LAIRD_MODS_
+// averaging of the signal level of received beacon/probe rsp
+// the cumulative value (avg_signal) is multipled by LAIRD_SCALE
+// averaging subtracts off 1/LAIRD_AVG before adding the new signal
+// note, not using EWMA routines since values are signed
+#define LAIRD_AVG	(8)
+#define LAIRD_SCALE (8*(LAIRD_AVG))
+	s32 signal = rx_status->signal;
+
+	cbss = cfg80211_get_bss(local->hw.wiphy,
+							NULL, /* any channel */
+							mgmt->bssid,
+							NULL, 0, /* any ssid */
+							IEEE80211_BSS_TYPE_ANY,
+							IEEE80211_PRIVACY_ANY);
+
+	if (cbss) {
+		bss = (void *)cbss->priv;
+		if (bss->avg_signal) {
+			bss->avg_signal += (signal * (LAIRD_SCALE/LAIRD_AVG))
+				- ((bss->avg_signal + (LAIRD_AVG/2)) / LAIRD_AVG);
+			signal = bss->avg_signal;
+			if (signal >= 0) signal += LAIRD_SCALE/2;
+			else signal -= LAIRD_SCALE/2;
+			signal /= LAIRD_SCALE;
+		} else {
+			bss->avg_signal = signal * LAIRD_SCALE;
+		}
+		cfg80211_put_bss(local->hw.wiphy, cbss);
+	}
+#endif
 
 	if (rx_status->flag & RX_FLAG_NO_SIGNAL_VAL)
 		bss_meta.signal = 0; /* invalid signal indication */
 	else if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
+#ifndef _REMOVE_LAIRD_MODS_
+		bss_meta.signal = signal * 100;
+#else
 		bss_meta.signal = rx_status->signal * 100;
+#endif
 	else if (ieee80211_hw_check(&local->hw, SIGNAL_UNSPEC))
+#ifndef _REMOVE_LAIRD_MODS_
+		bss_meta.signal = (signal * 100) / local->hw.max_signal;
+#else
 		bss_meta.signal = (rx_status->signal * 100) / local->hw.max_signal;
+#endif
 
 	bss_meta.scan_width = NL80211_BSS_CHAN_WIDTH_20;
 	if (rx_status->bw == RATE_INFO_BW_5)
@@ -180,8 +258,15 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	    scan_sdata->vif.bss_conf.assoc &&
 	    ieee80211_have_rx_timestamp(rx_status)) {
 		bss_meta.parent_tsf =
+#ifdef CONFIG_ANDROID
+	        /** Android's Location service is expecting timestamp to be
+		    * local time (in microsecond) since boot;
+		    * and not the TSF found in the beacon. */
+		    ktime_to_us(ktime_get_boottime());
+#else
 			ieee80211_calculate_rx_timestamp(local, rx_status,
 							 len + FCS_LEN, 24);
+#endif
 		ether_addr_copy(bss_meta.parent_bssid,
 				scan_sdata->vif.bss_conf.bssid);
 	}
@@ -209,10 +294,8 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (baselen > len)
 		return NULL;
 
-	elems = ieee802_11_parse_elems(elements, len - baselen, false,
-				       mgmt->bssid, cbss->bssid);
-	if (!elems)
-		return NULL;
+	ieee802_11_parse_elems(elements, len - baselen, false, &elems,
+			       mgmt->bssid, cbss->bssid);
 
 	/* In case the signal is invalid update the status */
 	signal_valid = channel == cbss->channel;
@@ -220,16 +303,14 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 		rx_status->flag |= RX_FLAG_NO_SIGNAL_VAL;
 
 	bss = (void *)cbss->priv;
-	ieee80211_update_bss_from_elems(local, bss, elems, rx_status, beacon);
+	ieee80211_update_bss_from_elems(local, bss, &elems, rx_status, beacon);
 
 	list_for_each_entry(non_tx_cbss, &cbss->nontrans_list, nontrans_list) {
 		non_tx_bss = (void *)non_tx_cbss->priv;
 
-		ieee80211_update_bss_from_elems(local, non_tx_bss, elems,
+		ieee80211_update_bss_from_elems(local, non_tx_bss, &elems,
 						rx_status, beacon);
 	}
-
-	kfree(elems);
 
 	return bss;
 }
@@ -465,18 +546,15 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 	scan_req = rcu_dereference_protected(local->scan_req,
 					     lockdep_is_held(&local->mtx));
 
+	if (scan_req != local->int_scan_req) {
+		local->scan_info.aborted = aborted;
+		cfg80211_scan_done(scan_req, &local->scan_info);
+	}
 	RCU_INIT_POINTER(local->scan_req, NULL);
 	RCU_INIT_POINTER(local->scan_sdata, NULL);
 
 	local->scanning = 0;
 	local->scan_chandef.chan = NULL;
-
-	synchronize_rcu();
-
-	if (scan_req != local->int_scan_req) {
-		local->scan_info.aborted = aborted;
-		cfg80211_scan_done(scan_req, &local->scan_info);
-	}
 
 	/* Set power back to normal operating levels. */
 	ieee80211_hw_config(local, 0);
@@ -693,6 +771,10 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	bool hw_scan = local->ops->hw_scan;
 	int rc;
+#ifndef _REMOVE_LAIRD_MODS_
+	// need scan_req for fetching next_delay duration values
+	struct cfg80211_scan_request *scan_req = req;
+#endif
 
 	lockdep_assert_held(&local->mtx);
 
@@ -796,8 +878,15 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 		/* We need to ensure power level is at max for scanning. */
 		ieee80211_hw_config(local, 0);
 
+#ifndef _REMOVE_LAIRD_MODS_
+		 if ((req->channels[0]->flags & IEEE80211_CHAN_NO_IR) ||
+		     !local->scan_req->wdev ||
+		    ((req->channels[0]->flags & IEEE80211_CHAN_RADAR) &&
+		     local->scan_req->wdev->iftype != NL80211_IFTYPE_STATION) ||
+#else
 		if ((req->channels[0]->flags & (IEEE80211_CHAN_NO_IR |
 						IEEE80211_CHAN_RADAR)) ||
+#endif
 		    !req->n_ssids) {
 			next_delay = IEEE80211_PASSIVE_CHANNEL_TIME;
 			if (req->n_ssids)
@@ -852,13 +941,22 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 }
 
 static unsigned long
-ieee80211_scan_get_channel_time(struct ieee80211_channel *chan)
+ieee80211_scan_get_channel_time(struct ieee80211_channel *chan
+#ifndef _REMOVE_LAIRD_MODS_
+								, struct cfg80211_scan_request *scan_req
+#endif
+	)
 {
 	/*
 	 * TODO: channel switching also consumes quite some time,
 	 * add that delay as well to get a better estimation
 	 */
+#ifndef _REMOVE_LAIRD_MODS_
+	if ((chan->flags & IEEE80211_CHAN_NO_IR) || !scan_req->wdev ||
+	   ((chan->flags & IEEE80211_CHAN_RADAR) && scan_req->wdev->iftype != NL80211_IFTYPE_STATION))
+#else
 	if (chan->flags & (IEEE80211_CHAN_NO_IR | IEEE80211_CHAN_RADAR))
+#endif
 		return IEEE80211_PASSIVE_CHANNEL_TIME;
 	return IEEE80211_PROBE_DELAY + IEEE80211_CHANNEL_TIME;
 }
@@ -911,7 +1009,11 @@ static void ieee80211_scan_state_decision(struct ieee80211_local *local,
 	 */
 
 	bad_latency = time_after(jiffies +
+#ifndef _REMOVE_LAIRD_MODS_
+				 ieee80211_scan_get_channel_time(next_chan, scan_req),
+#else
 				 ieee80211_scan_get_channel_time(next_chan),
+#endif
 				 local->leave_oper_channel_time + HZ / 8);
 
 	if (associated && !tx_empty) {
@@ -1009,7 +1111,13 @@ set_channel:
 	 *
 	 * In any case, it is not necessary for a passive scan.
 	 */
+
+#ifndef _REMOVE_LAIRD_MODS_
+	if ((chan->flags & IEEE80211_CHAN_NO_IR) || !scan_req->wdev ||
+	   ((chan->flags & IEEE80211_CHAN_RADAR) && scan_req->wdev->iftype != NL80211_IFTYPE_STATION) ||
+#else
 	if ((chan->flags & (IEEE80211_CHAN_NO_IR | IEEE80211_CHAN_RADAR)) ||
+#endif
 	    !scan_req->n_ssids) {
 		*next_delay = IEEE80211_PASSIVE_CHANNEL_TIME;
 		local->next_scan_state = SCAN_DECISION;
@@ -1026,6 +1134,12 @@ set_channel:
 static void ieee80211_scan_state_suspend(struct ieee80211_local *local,
 					 unsigned long *next_delay)
 {
+#ifndef _REMOVE_LAIRD_MODS_
+	struct cfg80211_scan_request *scan_req;
+	scan_req = rcu_dereference_protected(local->scan_req,
+					     lockdep_is_held(&local->mtx));
+#endif
+
 	/* switch back to the operating channel */
 	local->scan_chandef.chan = NULL;
 	ieee80211_hw_config(local, IEEE80211_CONF_CHANGE_CHANNEL);
@@ -1033,6 +1147,10 @@ static void ieee80211_scan_state_suspend(struct ieee80211_local *local,
 	/* disable PS */
 	ieee80211_offchannel_return(local);
 
+#ifndef _REMOVE_LAIRD_MODS_
+	*next_delay = __get_SUSPEND_TIME(scan_req);
+	if (!*next_delay) // fall through to default value if zero
+#endif
 	*next_delay = HZ / 5;
 	/* afterwards, resume scan & go to next channel */
 	local->next_scan_state = SCAN_RESUME;

@@ -31,8 +31,13 @@ static inline int ieee80211_aes_gcm_decrypt(struct crypto_aead *tfm,
 static inline struct crypto_aead *
 ieee80211_aes_gcm_key_setup_encrypt(const u8 key[], size_t key_len)
 {
+#ifdef CONFIG_LRDMWL_FIPS
+	return aead_key_setup_encrypt("gcmp(gcm(aes))", key,
+				      key_len, IEEE80211_GCMP_MIC_LEN);
+#else
 	return aead_key_setup_encrypt("gcm(aes)", key,
 				      key_len, IEEE80211_GCMP_MIC_LEN);
+#endif
 }
 
 static inline void ieee80211_aes_gcm_key_free(struct crypto_aead *tfm)

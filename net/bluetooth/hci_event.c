@@ -5228,6 +5228,12 @@ static void le_conn_update_addr(struct hci_conn *conn, bdaddr_t *bdaddr,
 		 */
 		conn->le_conn_min_interval = conn->hdev->le_conn_min_interval;
 		conn->le_conn_max_interval = conn->hdev->le_conn_max_interval;
+		/* Save the device latency and supervisory timeout
+		 * as slave values, which will also be used to
+		 * trigger a connection update.
+		 */
+		conn->slave_le_conn_latency = conn->hdev->le_conn_latency;
+		conn->slave_le_supv_timeout = conn->hdev->le_supv_timeout;
 	}
 }
 

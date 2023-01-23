@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config BT_BNEP
 	tristate "BNEP protocol support"
+	depends on m
 	depends on BT_BREDR
-	select CRC32
+	depends on CRC32
 	help
 	  BNEP (Bluetooth Network Encapsulation Protocol) is Ethernet
 	  emulation layer on top of Bluetooth.  BNEP is required for
