@@ -707,7 +707,7 @@ static u16 ieee80211_netdev_select_queue(struct net_device *dev,
 static void
 ieee80211_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
-	dev_fetch_sw_netstats(stats, dev->tstats);
+	dev_fetch_sw_netstats(stats, netdev_tstats(dev));
 }
 
 static const struct net_device_ops ieee80211_dataif_ops = {
@@ -750,6 +750,9 @@ static u16 ieee80211_monitor_select_queue(struct net_device *dev,
 }
 
 static const struct net_device_ops ieee80211_monitorif_ops = {
+#if LINUX_VERSION_IS_LESS(4,10,0)
+	.ndo_change_mtu = __change_mtu,
+#endif
 	.ndo_open		= ieee80211_open,
 	.ndo_stop		= ieee80211_stop,
 	.ndo_uninit		= ieee80211_uninit,
@@ -1305,7 +1308,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 
 static void ieee80211_if_free(struct net_device *dev)
 {
-	free_percpu(dev->tstats);
+	free_percpu(netdev_tstats(dev));
 }
 
 static void ieee80211_if_setup(struct net_device *dev)
@@ -1313,8 +1316,7 @@ static void ieee80211_if_setup(struct net_device *dev)
 	ether_setup(dev);
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->netdev_ops = &ieee80211_dataif_ops;
-	dev->needs_free_netdev = true;
-	dev->priv_destructor = ieee80211_if_free;
+	netdev_set_priv_destructor(dev, ieee80211_if_free);
 }
 
 static void ieee80211_if_setup_no_queue(struct net_device *dev)
@@ -1942,8 +1944,9 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 
 		dev_net_set(ndev, wiphy_net(local->hw.wiphy));
 
-		ndev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
-		if (!ndev->tstats) {
+		netdev_assign_tstats(ndev,
+				     netdev_alloc_pcpu_stats(struct pcpu_sw_netstats));
+		if (!netdev_tstats(ndev)) {
 			free_netdev(ndev);
 			return -ENOMEM;
 		}
@@ -2059,7 +2062,6 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 
 		ret = cfg80211_register_netdevice(ndev);
 		if (ret) {
-			ieee80211_if_free(ndev);
 			free_netdev(ndev);
 			return ret;
 		}
