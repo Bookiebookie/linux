@@ -1699,12 +1699,10 @@ struct ieee80211_ht_operation {
  * A-MPDU buffer sizes
  * According to HT size varies from 8 to 64 frames
  * HE adds the ability to have up to 256 frames.
- * EHT adds the ability to have up to 1K frames.
  */
 #define IEEE80211_MIN_AMPDU_BUF		0x8
 #define IEEE80211_MAX_AMPDU_BUF_HT	0x40
-#define IEEE80211_MAX_AMPDU_BUF_HE	0x100
-#define IEEE80211_MAX_AMPDU_BUF_EHT	0x400
+#define IEEE80211_MAX_AMPDU_BUF		0x100
 
 
 /* Spatial Multiplexing Power Save Modes (for capability) */

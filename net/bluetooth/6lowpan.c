@@ -569,7 +569,7 @@ static void netdev_setup(struct net_device *dev)
 
 	dev->netdev_ops		= &netdev_ops;
 	dev->header_ops		= &header_ops;
-	dev->needs_free_netdev	= true;
+	netdev_set_def_destructor(dev);
 }
 
 static struct device_type bt_type = {
@@ -971,7 +971,6 @@ static int get_l2cap_conn(char *buf, bdaddr_t *addr, u8 *addr_type,
 	hci_dev_lock(hdev);
 	hcon = hci_conn_hash_lookup_le(hdev, addr, *addr_type);
 	hci_dev_unlock(hdev);
-	hci_dev_put(hdev);
 
 	if (!hcon)
 		return -ENOENT;

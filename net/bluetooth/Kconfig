@@ -5,17 +5,17 @@
 
 menuconfig BT
 	tristate "Bluetooth subsystem support"
+	depends on m
 	depends on !S390
 	depends on RFKILL || !RFKILL
-	select CRC16
-	select CRYPTO
-	select CRYPTO_SKCIPHER
-	select CRYPTO_LIB_AES
-	imply CRYPTO_AES
-	select CRYPTO_CMAC
-	select CRYPTO_ECB
-	select CRYPTO_SHA256
-	select CRYPTO_ECDH
+	depends on CRC16
+	depends on CRYPTO
+	depends on CRYPTO_BLKCIPHER || CRYPTO_SKCIPHER
+	depends on CRYPTO_AES
+	select BPAUTO_CRYPTO_CMAC
+	depends on CRYPTO_ECB
+	depends on CRYPTO_SHA256
+	select BPAUTO_CRYPTO_ECDH
 	help
 	  Bluetooth is low-cost, low-power, short-range wireless technology.
 	  It was designed as a replacement for cables and other short-range
@@ -79,6 +79,7 @@ config BT_LE
 
 config BT_6LOWPAN
 	tristate "Bluetooth 6LoWPAN support"
+	depends on m
 	depends on BT_LE && 6LOWPAN
 	help
 	  IPv6 compression over Bluetooth Low Energy.
@@ -87,7 +88,7 @@ config BT_LEDS
 	bool "Enable LED triggers"
 	depends on BT
 	depends on LEDS_CLASS
-	select LEDS_TRIGGERS
+	select BPAUTO_LEDS_TRIGGERS
 	help
 	  This option selects a few LED triggers for different
 	  Bluetooth events.
