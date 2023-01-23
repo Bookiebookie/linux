@@ -485,4 +485,10 @@ void net_ns_init(void);
 static inline void net_ns_init(void) {}
 #endif
 
+#define possible_write_pnet(pnet, net) write_pnet(pnet, net)
+#define possible_read_pnet(pnet) read_pnet(pnet)
+
 #endif /* __NET_NET_NAMESPACE_H */
+
+
+
