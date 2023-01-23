@@ -3,7 +3,7 @@
 
 #include <linux/version.h>
 
-#ifdef CPTCFG_BPAUTO_BUILD_WANT_DEV_COREDUMP
+#ifdef CONFIG_BPAUTO_BUILD_WANT_DEV_COREDUMP
 int devcoredump_init(void);
 void devcoredump_exit(void);
 #else

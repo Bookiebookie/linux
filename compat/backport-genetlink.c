@@ -160,18 +160,8 @@ static int backport_pre_doit(__genl_const struct genl_ops *ops,
 {
 	const struct genl_family *family = find_family_real_ops(&ops);
 	int err;
-#if LINUX_VERSION_IS_LESS(4,12,0)
-	struct netlink_ext_ack *extack = kzalloc(sizeof(*extack), GFP_KERNEL);
 
-	if (!extack)
-		return -ENOMEM;
-
-	__bp_genl_info_userhdr_set(info, extack);
-
-	extack->__bp_doit = ops->doit;
-#else
 	struct netlink_ext_ack *extack = genl_info_extack(info);
-#endif
 
 	if (ops->validate & GENL_DONT_VALIDATE_STRICT)
 		err = nlmsg_validate_deprecated(info->nlhdr,
@@ -185,22 +175,6 @@ static int backport_pre_doit(__genl_const struct genl_ops *ops,
 	if (!err && family->pre_doit)
 		err = family->pre_doit(ops, skb, info);
 
-#if LINUX_VERSION_IS_LESS(4,12,0)
-	if (err) {
-		/* signal to do nothing */
-		extack->__bp_doit = NULL;
-
-		extack_netlink_ack(skb, info->nlhdr, err, extack);
-
-		/* suppress sending ACK from normal netlink code */
-		info->nlhdr->nlmsg_flags &= ~NLM_F_ACK;
-
-		/* extack will be freed in post_doit as usual */
-
-		return 0;
-	}
-#endif
-
 	return err;
 }
 
@@ -210,17 +184,10 @@ static void backport_post_doit(__genl_const struct genl_ops *ops,
 {
 	const struct genl_family *family = find_family_real_ops(&ops);
 
-#if LINUX_VERSION_IS_LESS(4,12,0)
-	if (genl_info_extack(info)->__bp_doit)
-#else
+
 	if (1)
-#endif
 		if (family->post_doit)
 			family->post_doit(ops, skb, info);
-
-#if LINUX_VERSION_IS_LESS(4,12,0)
-	kfree(__bp_genl_info_userhdr(info));
-#endif
 }
 
 int backport_genl_register_family(struct genl_family *family)
@@ -243,10 +210,6 @@ int backport_genl_register_family(struct genl_family *family)
 	 * memory layout isn't compatible with the old version
 	 */
 	for (i = 0; i < family->n_ops; i++) {
-#if LINUX_VERSION_IS_LESS(4,12,0)
-		if (ops[i].doit)
-			ops[i].doit = extack_doit;
-#endif
 /*
  * TODO: add dumpit redirect (like extack_doit) that will
  *       make this code honor !GENL_DONT_VALIDATE_DUMP and
@@ -262,23 +225,18 @@ int backport_genl_register_family(struct genl_family *family)
 	COPY(version);
 	COPY(maxattr);
 	COPY(netnsok);
-#if LINUX_VERSION_IS_GEQ(3,10,0)
 	COPY(parallel_ops);
-#endif
 	/* The casts are OK - we checked everything is the same offset in genl_ops */
 	family->family.pre_doit = (void *)backport_pre_doit;
 	family->family.post_doit = (void *)backport_post_doit;
 	/* attrbuf is output only */
 	family->copy_ops = (void *)ops;
-#if LINUX_VERSION_IS_GEQ(3,13,0)
 	family->family.ops = (void *)ops;
 	COPY(mcgrps);
 	COPY(n_ops);
 	COPY(n_mcgrps);
-#endif
-#if LINUX_VERSION_IS_GEQ(3,11,0)
+
 	COPY(module);
-#endif
 
 	err = __real_backport_genl_register_family(&family->family);
 
@@ -287,29 +245,8 @@ int backport_genl_register_family(struct genl_family *family)
 
 	if (err)
 		return err;
-
-#if LINUX_VERSION_IS_GEQ(3,13,0) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7,0)
 	return 0;
-#else
-	for (i = 0; i < family->n_ops; i++) {
-		void *opsn = ops + i;
-		err = genl_register_ops(&family->family, opsn);
-		if (err < 0)
-			goto error;
-	}
 
-	for (i = 0; i < family->n_mcgrps; i++) {
-		err = genl_register_mc_group(&family->family,
-					     &family->mcgrps[i]);
-		if (err)
-			goto error;
-	}
-
-	return 0;
- error:
-	genl_unregister_family(family);
-	return err;
-#endif /* LINUX_VERSION_IS_GEQ(3,13,0) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7,0) */
 }
 EXPORT_SYMBOL_GPL(backport_genl_register_family);
 
@@ -326,11 +263,7 @@ static u32 __backport_genl_group(const struct genl_family *family,
 {
 	if (WARN_ON_ONCE(group >= family->n_mcgrps))
 		return INVALID_GROUP;
-#if LINUX_VERSION_IS_LESS(3,13,0)
-	return family->mcgrps[group].id;
-#else
 	return family->family.mcgrp_offset + group;
-#endif
 }
 
 void genl_notify(const struct genl_family *family, struct sk_buff *skb,

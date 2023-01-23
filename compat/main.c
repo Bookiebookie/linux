@@ -8,24 +8,24 @@ MODULE_AUTHOR("Luis R. Rodriguez");
 MODULE_DESCRIPTION("Kernel backport module");
 MODULE_LICENSE("GPL");
 
-#ifndef CPTCFG_KERNEL_NAME
+#ifndef CONFIG_KERNEL_NAME
 #error "You need a CPTCFG_KERNEL_NAME"
 #endif
 
-#ifndef CPTCFG_KERNEL_VERSION
+#ifndef CONFIG_KERNEL_VERSION
 #error "You need a CPTCFG_KERNEL_VERSION"
 #endif
 
-#ifndef CPTCFG_VERSION
+#ifndef CONFIG_VERSION
 #error "You need a CPTCFG_VERSION"
 #endif
 
-#ifdef CPTCFG_BPAUTO_BUILD_CRYPTO_CMAC
+#ifdef CONFIG_BPAUTO_BUILD_CRYPTO_CMAC
 extern int crypto_cmac_init(void);
 extern void crypto_cmac_exit(void);
 #endif
 
-#ifdef CPTCFG_BPAUTO_BUILD_CRYPTO_ECDH
+#ifdef CONFIG_BPAUTO_BUILD_CRYPTO_ECDH
 extern int ecdh_init(void);
 extern void ecdh_exit(void);
 #endif
@@ -84,10 +84,10 @@ static int __init backport_init(void)
 
 #endif /* BACKPORTS_GIT_TRACKED */
 
-#ifdef CPTCFG_BPAUTO_BUILD_CRYPTO_ECDH
+#ifdef CONFIG_BPAUTO_BUILD_CRYPTO_ECDH
 	ecdh_init();
 #endif
-#ifdef CPTCFG_BPAUTO_BUILD_CRYPTO_CMAC
+#ifdef CONFIG_BPAUTO_BUILD_CRYPTO_CMAC
 	crypto_cmac_init();
 #endif
         return 0;
@@ -96,10 +96,10 @@ subsys_initcall(backport_init);
 
 static void __exit backport_exit(void)
 {
-#ifdef CPTCFG_BPAUTO_BUILD_CRYPTO_ECDH
+#ifdef CONFIG_BPAUTO_BUILD_CRYPTO_ECDH
 	ecdh_exit();
 #endif
-#ifdef CPTCFG_BPAUTO_BUILD_CRYPTO_CMAC
+#ifdef CONFIG_BPAUTO_BUILD_CRYPTO_CMAC
 	crypto_cmac_exit();
 #endif
 	devcoredump_exit();

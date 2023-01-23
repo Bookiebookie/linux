@@ -22,10 +22,6 @@ static bool devcd_disabled;
 /* if data isn't read by userspace after 5 minutes then delete it */
 #define DEVCD_TIMEOUT	(HZ * 60 * 5)
 
-#if LINUX_VERSION_IS_LESS(3,11,0)
-static struct bin_attribute devcd_attr_data;
-#endif
-
 struct devcd_entry {
 	struct device devcd_dev;
 	void *data;
@@ -67,9 +63,6 @@ static void devcd_del(struct work_struct *wk)
 
 	devcd = container_of(wk, struct devcd_entry, del_wk.work);
 
-#if LINUX_VERSION_IS_LESS(3,11,0)
-	device_remove_bin_file(&devcd->devcd_dev, &devcd_attr_data);
-#endif
 	device_del(&devcd->devcd_dev);
 	put_device(&devcd->devcd_dev);
 }
@@ -103,7 +96,6 @@ static struct bin_attribute devcd_attr_data = {
 	.write = devcd_data_write,
 };
 
-#if LINUX_VERSION_IS_GEQ(3,11,0)
 static struct bin_attribute *devcd_dev_bin_attrs[] = {
 	&devcd_attr_data, NULL,
 };
@@ -115,7 +107,6 @@ static const struct attribute_group devcd_dev_group = {
 static const struct attribute_group *devcd_dev_groups[] = {
 	&devcd_dev_group, NULL,
 };
-#endif /* LINUX_VERSION_IS_GEQ(3,11,0) */
 
 static int devcd_free(struct device *dev, void *data)
 {
@@ -156,25 +147,16 @@ static struct attribute *devcd_class_attrs[] = {
 	&class_attr_disabled.attr,
 	NULL,
 };
-#if LINUX_VERSION_IS_GEQ(4,10,0)
 ATTRIBUTE_GROUPS(devcd_class);
-#else
-#define BP_ATTR_GRP_STRUCT class_attribute
-ATTRIBUTE_GROUPS_BACKPORT(devcd_class);
-#endif
 
 static struct class devcd_class = {
 	.name		= "devcoredump",
 	.owner		= THIS_MODULE,
 	.dev_release	= devcd_dev_release,
-#if LINUX_VERSION_IS_GEQ(3,11,0)
+
 	.dev_groups	= devcd_dev_groups,
-#endif
-#if LINUX_VERSION_IS_GEQ(4,10,0)
 	.class_groups	= devcd_class_groups,
-#else
 	.class_attrs = devcd_class_dev_attrs,
-#endif
 };
 
 static ssize_t devcd_readv(char *buffer, loff_t offset, size_t count,
@@ -307,11 +289,6 @@ void dev_coredumpm(struct device *dev, struct module *owner,
 
 	if (device_add(&devcd->devcd_dev))
 		goto put_device;
-
-#if LINUX_VERSION_IS_LESS(3,11,0)
-	if (device_create_bin_file(&devcd->devcd_dev, &devcd_attr_data))
-		goto put_device;
-#endif
 
 	/*
 	 * These should normally not fail, but there is no problem
