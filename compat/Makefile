@@ -8,7 +8,6 @@ compat-y += main.o
 
 # Kernel backport compatibility code
 compat-$(CONFIG_KERNEL_5_15) += backport-5.15.o
-
 compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/verify.o
 compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/pkcs7.asn1.o
 compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/pkcs7_verify.o
@@ -28,7 +27,6 @@ compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/sha256.o
 compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/oid.o
 compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/asn1parse.o
 compat-$(CONFIG_BPAUTO_BUILD_SYSTEM_DATA_VERIFICATION) += verification/rsapubkey.asn1.o
-
 compat-$(CONFIG_BPAUTO_BUILD_CRYPTO_CMAC) += cmac.o
 compat-$(CONFIG_BPAUTO_BUILD_CRYPTO_ECDH) += kpp.o ecc.o ecdh.o ecdh_helper.o
 
