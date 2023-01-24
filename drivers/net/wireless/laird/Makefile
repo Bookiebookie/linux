@@ -1,2 +1,2 @@
-obj-$(CPTCFG_LRDMWL)		+= lrdmwl/
+obj-$(CONFIG_LRDMWL)		+= lrdmwl/
 
