@@ -1442,7 +1442,7 @@ static struct platform_driver bcm_driver = {
 	},
 };
 
-#ifdef CPTCFG_BT_HCIUART_SERDEV
+#ifdef CONFIG_BT_HCIUART_SERDEV
 static int bcm_serdev_probe(struct serdev_device *serdev)
 {
 	struct bcm_device *bcmdev;
@@ -1546,7 +1546,7 @@ int __init bcm_init(void)
 	 * driver (ACPI generated) and serdev driver (DT).
 	 */
 	platform_driver_register(&bcm_driver);
-#ifdef CPTCFG_BT_HCIUART_SERDEV
+#ifdef CONFIG_BT_HCIUART_SERDEV
 	serdev_device_driver_register(&bcm_serdev_driver);
 #endif
 
@@ -1556,7 +1556,7 @@ int __init bcm_init(void)
 int __exit bcm_deinit(void)
 {
 	platform_driver_unregister(&bcm_driver);
-#ifdef CPTCFG_BT_HCIUART_SERDEV
+#ifdef CONFIG_BT_HCIUART_SERDEV
 	serdev_device_driver_unregister(&bcm_serdev_driver);
 #endif
 

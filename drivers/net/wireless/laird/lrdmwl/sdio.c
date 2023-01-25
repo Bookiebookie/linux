@@ -33,14 +33,9 @@
 #include "sdio.h"
 #include "hostcmd.h"
 
-#if LINUX_VERSION_IS_GEQ(4,14,0)
-#if LINUX_VERSION_IS_GEQ(5,0,0)
 #define MMC_STATE_SUSPENDED	(1<<5)		/* card is suspended */
-#else
-#define MMC_STATE_SUSPENDED	(1<<6)		/* card is suspended */
-#endif
 #define mmc_card_clr_suspended(c) ((c)->state &= ~MMC_STATE_SUSPENDED)
-#endif
+
 
 #define MWL_SDIODRV_VERSION  "10.3.0.16-20160105"
 #define LRD_SDIO_VERSION     LRD_BLD_VERSION "-" MWL_SDIODRV_VERSION
@@ -2686,10 +2681,8 @@ static void mwl_sdio_down_dev(struct mwl_priv *priv)
 static int mwl_sdio_mmc_hw_reset(struct sdio_func *func)
 {
 	int rc = mmc_hw_reset(func->card->host);
-#if LINUX_VERSION_IS_GEQ(4,14,0)
 	if (rc == 0)
 		mmc_card_clr_suspended(func->card);
-#endif
 
 	return rc;
 }
@@ -3070,23 +3063,15 @@ static void mwl_sdio_complete(struct device *dev)
 
 static int mwl_sdio_resume(struct device *dev)
 {
-#if LINUX_VERSION_IS_LESS(3,4,0)
-	mwl_sdio_pm_worker(dev, MWL_PM_RESUME_EARLY);
-#endif
 	return mwl_sdio_pm_worker(dev, MWL_PM_RESUME);
 }
 
 static int mwl_sdio_suspend(struct device *dev)
 {
-#if LINUX_VERSION_IS_LESS(3,4,0)
-	mwl_sdio_pm_worker(dev, MWL_PM_SUSPEND);
-	return mwl_sdio_pm_worker(dev, MWL_PM_SUSPEND_LATE);
-#else
 	return mwl_sdio_pm_worker(dev, MWL_PM_SUSPEND);
-#endif
 }
 
-#if LINUX_VERSION_IS_GEQ(3,4,0)
+
 static int mwl_sdio_suspend_late(struct device *dev)
 {
 	return mwl_sdio_pm_worker(dev, MWL_PM_SUSPEND_LATE);
@@ -3106,21 +3091,18 @@ static int mwl_sdio_poweroff(struct device *dev)
 {
 	return mwl_sdio_pm_worker(dev, MWL_PM_POWEROFF);
 }
-#endif
 
 static const struct dev_pm_ops mwl_sdio_pm_ops = {
 	.prepare        = mwl_sdio_prepare,
 	.complete       = mwl_sdio_complete,
 	.resume         = mwl_sdio_resume,
 	.suspend        = mwl_sdio_suspend,
-#if LINUX_VERSION_IS_GEQ(3,4,0)
 	.resume_early   = mwl_sdio_resume_early,
 	.thaw_early     = mwl_sdio_resume_early,
 	.restore_early  = mwl_sdio_restore_early,
 	.suspend_late   = mwl_sdio_suspend_late,
 	.freeze_late    = mwl_sdio_suspend_late,
 	.poweroff_late  = mwl_sdio_poweroff,
-#endif
 };
 #endif
 

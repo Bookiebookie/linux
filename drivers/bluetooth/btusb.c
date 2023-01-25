@@ -4044,7 +4044,7 @@ static int btusb_probe(struct usb_interface *intf,
 			goto out_free_dev;
 	}
 
-	if (IS_ENABLED(CPTCFG_BT_HCIBTUSB_BCM) && data->diag) {
+	if (IS_ENABLED(CONFIG_BT_HCIBTUSB_BCM) && data->diag) {
 		if (!usb_driver_claim_interface(&btusb_driver,
 						data->diag, data))
 			__set_diag_interface(hdev);

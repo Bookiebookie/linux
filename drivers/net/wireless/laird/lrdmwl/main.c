@@ -1770,7 +1770,7 @@ int mwl_add_card(void *card, struct mwl_if_ops *if_ops,
 
 	priv->tx_amsdu_enable = tx_amsdu_enable;
 
-#ifdef CPTCFG_LRDMWL_FIPS
+#ifdef CONFIG_LRDMWL_FIPS
 	priv->host_crypto = fips_enabled && fips_wifi_enabled;
 	if (priv->host_crypto)
 		host_crypto_mode = 1;

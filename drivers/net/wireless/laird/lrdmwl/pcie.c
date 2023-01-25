@@ -2435,16 +2435,10 @@ static u32 pci_read_mac_reg(struct mwl_priv *priv, u32 offset)
 #endif
 
 static 
-#if LINUX_VERSION_IS_GEQ(3,7,0)
-const 
-#endif /* LINUX_VERSION_IS_GEQ(3,7,0) */
+
 struct pci_error_handlers mwl_pcie_err_handler = {
-#if LINUX_VERSION_IS_GEQ(4,13,0)
 	.reset_prepare = mwl_pcie_reset_prepare,
 	.reset_done    = mwl_pcie_reset_done,
-#elif LINUX_VERSION_IS_GEQ(3,16,0)
-	.reset_notify = mwl_pcie_reset_prepare_notify,
-#endif
 };
 
 static struct pci_driver mwl_pci_driver = {

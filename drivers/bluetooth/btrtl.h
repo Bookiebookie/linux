@@ -47,7 +47,7 @@ struct rtl_vendor_config {
 	struct rtl_vendor_config_entry entry[];
 } __packed;
 
-#if IS_ENABLED(CPTCFG_BT_RTL)
+#if IS_ENABLED(CONFIG_BT_RTL)
 
 struct btrtl_device_info *btrtl_initialize(struct hci_dev *hdev,
 					   const char *postfix);
