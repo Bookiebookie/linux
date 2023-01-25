@@ -3,7 +3,7 @@
  * Copyright (C) 2021 Intel Corporation
  */
 
-#if IS_ENABLED(CPTCFG_BT_AOSPEXT)
+#if IS_ENABLED(CONFIG_BT_AOSPEXT)
 
 void aosp_do_open(struct hci_dev *hdev);
 void aosp_do_close(struct hci_dev *hdev);
