@@ -55,7 +55,7 @@
 
 config BP_MODULES
 	bool
-	default m
+	default MODULES
 
 	help
 	This symbol is necessary for the newer kconf tool, it looks
@@ -179,3 +179,4 @@ config BPAUTO_BUILD_CRYPTO_LIB_ARC4
 	depends on !CRYPTO_LIB_ARC4
 	#h-file crypto/arc4.h
 	#c-file lib/crypto/arc4.c
+

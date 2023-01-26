@@ -1,10 +1,25 @@
-ccflags-y += -I$(src) $(call cc-option, -Wframe-larger-than=1280)
-ifeq ($(CONFIG_BACKPORT_INTEGRATE),)
-obj-m += compat.o
-else
-obj-y += compat.o
-endif
+BACKPORTS_VERSION="v10.54.0.16"
+BACKPORTED_KERNEL_VERSION="LRD-REL-10.54.0.16-0-ge350ba59c07e"
+BACKPORTED_KERNEL_VERSION_CODE=331574
+BACKPORTED_KERNEL_NAME="Linux"
+
+NOSTDINC_FLAGS += \
+	-DCONFIG_VERSION=\"$(BACKPORTS_VERSION)\" \
+	-DCONFIG_KERNEL_VERSION=\"$(BACKPORTED_KERNEL_VERSION)\" \
+	-DCONFIG_KERNEL_VERSION_CODE=$(BACKPORTED_KERNEL_VERSION_CODE) \
+	-DCONFIG_KERNEL_NAME=\"$(BACKPORTED_KERNEL_NAME)\" \
+	-DCONFIG_VERSION_KERNEL=$(VERSION) \
+	-DCPTCFG_VERSION_PATCHLEVEL=$(PATCHLEVEL) \
+	-DCPTCFG_VERSION_SUBLEVEL=$(SUBLEVEL) \
+
+cflags-y += -I$(src) $(call cc-option, -Wframe-larger-than=1280)
+# ifeq ($(CONFIG_BACKPORT_INTEGRATE),)
+# obj-m += compat.o
+# else
+# obj-y += compat.o
+# endif
 compat-y += main.o
+obj-m += compat.o
 
 # Kernel backport compatibility code
 compat-$(CONFIG_KERNEL_5_15) += backport-5.15.o

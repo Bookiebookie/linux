@@ -33,13 +33,13 @@ static const struct genl_family *find_family_real_ops(__genl_const struct genl_o
 	return family;
 }
 
+
 static int backport_pre_doit(__genl_const struct genl_ops *ops,
 			     struct sk_buff *skb,
 			     struct genl_info *info)
 {
 	const struct genl_family *family = find_family_real_ops(&ops);
 	int err;
-
 	struct netlink_ext_ack *extack = genl_info_extack(info);
 
 	if (ops->validate & GENL_DONT_VALIDATE_STRICT)
@@ -64,9 +64,9 @@ static void backport_post_doit(__genl_const struct genl_ops *ops,
 	const struct genl_family *family = find_family_real_ops(&ops);
 
 
-	if (1)
-		if (family->post_doit)
-			family->post_doit(ops, skb, info);
+	if (family->post_doit)
+		family->post_doit(ops, skb, info);
+
 }
 
 int backport_genl_register_family(struct genl_family *family)
@@ -105,6 +105,7 @@ int backport_genl_register_family(struct genl_family *family)
 	COPY(maxattr);
 	COPY(netnsok);
 	COPY(parallel_ops);
+
 	/* The casts are OK - we checked everything is the same offset in genl_ops */
 	family->family.pre_doit = (void *)backport_pre_doit;
 	family->family.post_doit = (void *)backport_post_doit;
@@ -114,7 +115,6 @@ int backport_genl_register_family(struct genl_family *family)
 	COPY(mcgrps);
 	COPY(n_ops);
 	COPY(n_mcgrps);
-
 	COPY(module);
 
 	err = __real_backport_genl_register_family(&family->family);
@@ -124,8 +124,8 @@ int backport_genl_register_family(struct genl_family *family)
 
 	if (err)
 		return err;
-	return 0;
 
+	return 0;
 }
 EXPORT_SYMBOL_GPL(backport_genl_register_family);
 

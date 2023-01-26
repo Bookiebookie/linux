@@ -13,4 +13,3 @@
 #include <linux/string.h>
 #include <crypto/ecdh.h>
 #include <crypto/kpp.h>
-

@@ -22,6 +22,10 @@ static bool devcd_disabled;
 /* if data isn't read by userspace after 5 minutes then delete it */
 #define DEVCD_TIMEOUT	(HZ * 60 * 5)
 
+#if LINUX_VERSION_IS_LESS(3,11,0)
+static struct bin_attribute devcd_attr_data;
+#endif
+
 struct devcd_entry {
 	struct device devcd_dev;
 	void *data;
@@ -147,16 +151,15 @@ static struct attribute *devcd_class_attrs[] = {
 	&class_attr_disabled.attr,
 	NULL,
 };
+
 ATTRIBUTE_GROUPS(devcd_class);
 
 static struct class devcd_class = {
 	.name		= "devcoredump",
 	.owner		= THIS_MODULE,
 	.dev_release	= devcd_dev_release,
-
 	.dev_groups	= devcd_dev_groups,
 	.class_groups	= devcd_class_groups,
-	.class_attrs = devcd_class_dev_attrs,
 };
 
 static ssize_t devcd_readv(char *buffer, loff_t offset, size_t count,
