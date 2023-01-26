@@ -523,7 +523,7 @@ static int reg_schedule_apply(const struct ieee80211_regdomain *regdom)
 	return 0;
 }
 
-#ifdef CPTCFG_CFG80211_CRDA_SUPPORT
+#ifdef CONFIG_CFG80211_CRDA_SUPPORT
 /* Max number of consecutive attempts to communicate with CRDA  */
 #define REG_MAX_CRDA_TIMEOUTS 10
 
@@ -596,7 +596,7 @@ static inline int call_crda(const char *alpha2)
 {
 	return -ENODATA;
 }
-#endif /* CPTCFG_CFG80211_CRDA_SUPPORT */
+#endif /* CONFIG_CFG80211_CRDA_SUPPORT */
 
 /* code to directly load a firmware database through request_firmware */
 static const struct fwdb_header *regdb;
@@ -736,7 +736,7 @@ static bool valid_country(const u8 *data, unsigned int size,
 	return true;
 }
 
-#ifdef CPTCFG_CFG80211_REQUIRE_SIGNED_REGDB
+#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB
 static struct key *builtin_regdb_keys;
 
 static void __init load_keys_from_buffer(const u8 *p, unsigned int buflen)
@@ -796,11 +796,11 @@ static int __init load_builtin_regdb_keys(void)
 
 	pr_notice("Loading compiled-in X.509 certificates for regulatory database\n");
 
-#ifdef CPTCFG_CFG80211_USE_KERNEL_REGDB_KEYS
+#ifdef CONFIG_CFG80211_USE_KERNEL_REGDB_KEYS
 	load_keys_from_buffer(shipped_regdb_certs, shipped_regdb_certs_len);
 #endif
-#ifdef CPTCFG_CFG80211_EXTRA_REGDB_KEYDIR
-	if (CPTCFG_CFG80211_EXTRA_REGDB_KEYDIR[0] != '\0')
+#ifdef CONFIG_CFG80211_EXTRA_REGDB_KEYDIR
+	if (CONFIG_CFG80211_EXTRA_REGDB_KEYDIR[0] != '\0')
 		load_keys_from_buffer(extra_regdb_certs, extra_regdb_certs_len);
 #endif
 
@@ -845,7 +845,7 @@ static bool regdb_has_valid_signature(const u8 *data, unsigned int size)
 static void free_regdb_keyring(void)
 {
 }
-#endif /* CPTCFG_CFG80211_REQUIRE_SIGNED_REGDB */
+#endif /* CONFIG_CFG80211_REQUIRE_SIGNED_REGDB */
 
 static bool valid_regdb(const u8 *data, unsigned int size)
 {
@@ -2091,7 +2091,7 @@ bool reg_last_request_cell_base(void)
 	return reg_request_cell_base(get_last_request());
 }
 
-#ifdef CPTCFG_CFG80211_REG_CELLULAR_HINTS
+#ifdef CONFIG_CFG80211_REG_CELLULAR_HINTS
 /* Core specific check */
 static enum reg_request_treatment
 reg_ignore_cell_hint(struct regulatory_request *pending_request)
