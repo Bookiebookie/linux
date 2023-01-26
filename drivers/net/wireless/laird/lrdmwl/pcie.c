@@ -178,14 +178,6 @@ static void mwl_pcie_reset_done(struct pci_dev *pdev)
 		}
 	}
 }
-#if LINUX_VERSION_IN_RANGE(3,16,0, 4,13,0)
-static void mwl_pcie_reset_prepare_notify(struct pci_dev *dev, bool prepare){
-	if (prepare)
-		mwl_pcie_reset_prepare(dev);
-	else
-		mwl_pcie_reset_done(dev);
-}
-#endif
 
 /*
  * Cleanup all software without cleaning anything related to PCIe and HW.
