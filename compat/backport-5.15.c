@@ -5,13 +5,7 @@
 #include <linux/uaccess.h>
 #include <linux/netdevice.h>
 
-#if LINUX_VERSION_IS_GEQ(3,7,0)
 #include <uapi/linux/if.h>
-#else
-#include <linux/if.h>
-#endif
-
-#if LINUX_VERSION_IS_GEQ(4,6,0)
 
 int get_user_ifreq(struct ifreq *ifr, void __user **ifrdata, void __user *arg)
 {
@@ -55,5 +49,3 @@ int put_user_ifreq(struct ifreq *ifr, void __user *arg)
 	return 0;
 }
 EXPORT_SYMBOL(put_user_ifreq);
-
-#endif /* >= 4.6.0 */
